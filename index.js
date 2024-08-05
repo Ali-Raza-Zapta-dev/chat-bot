@@ -44,7 +44,7 @@ async function genTextV2(prompt, res) {
 }
 
 app.listen(process.env.PORT, () => {
-  console.log(`SERVER IS RUNNING ON PORT:${process.env.PORT}`);
+  console.log(`SERVER IS RUNNING ON PORT--:${process.env.PORT}`);
 });
 
 async function run(prompt) {
