@@ -1,67 +1,4 @@
-// import express from "express";
-// import cors from "cors";
-// import dotenv from "dotenv";
 
-// dotenv.config();
-
-// const app = express();
-
-// app.use(cors());
-// app.use(express.json());
-
-// import { GoogleGenerativeAI } from "@google/generative-ai";
-// const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEYS);
-
-// app.get("/api/chat-bot", async (req, res, next) => {
-//   const prompt = req.query.prompt;
-
-//   // const result = await chatBot(prompt);
-//   // res.send(result);
-
-//   genTextStream(prompt, res);
-// });
-
-// async function chatBot(prompt) {
-//   const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-//   const chat = model.startChat({ history: [] });
-
-//   const result1 = await chat.sendMessage(prompt);
-
-//   const res = result1.response.text();
-//   return res;
-// }
-
-// async function genTextStream(prompt, res) {
-//   const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-//   // Set headers for SSE
-//   res.setHeader("Content-Type", "text/event-stream");
-//   res.setHeader("Cache-Control", "no-cache");
-//   res.setHeader("Connection", "keep-alive");
-
-//   try {
-//     const result = await model.generateContentStream([prompt], {
-//       temperature: 0.7,
-//       top_p: 0.9,
-//     });
-
-//     for await (const chunk of result.stream) {
-//       const text = chunk.text();
-//       res.write(`data: ${text}\n\n`);
-//     }
-
-//     // Signal the end of the stream
-//     res.write("event: end\n\n");
-//     res.end();
-//   } catch (error) {
-//     res.write(`event: error\ndata: ${error.message}\n\n`);
-//     res.end();
-//   }
-// }
-
-// app.listen(process.env.PORT, () => {
-//   console.log(`SERVER IS RUNNING ON PORT--:${process.env.PORT}`);
-// });
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
@@ -92,30 +29,29 @@ const upload = multer({ storage: storage });
 
 const conversationContexts = {};
 
-// function fileToGenerativePart(filePath, mimeType) {
-//   return {
-//     inlineData: {
-//       data: Buffer.from(fs.readFileSync(filePath)).toString("base64"),
-//       mimeType,
-//     },
-//   };
-// }
 
-function fileToGenerativePart(fileBuffer, mimeType) {
-  return {
-    inlineData: {
-      data: fileBuffer.toString("base64"),
-      mimeType,
-    },
-  };
+function fileToGenerativePart(file) {
+  if (file.mimetype.startsWith("text/")) {
+    return {
+      inlineData: {
+        data: file.buffer.toString("utf-8"),
+        mimeType: file.mimetype,
+      },
+    };
+  } else {
+    return {
+      inlineData: {
+        data: file.buffer.toString("base64"),
+        mimeType: file.mimetype,
+      },
+    };
+  }
 }
 
-app.post("/api/chat-bot", upload.single("file"), async (req, res) => {
-  const prompt = req.body.prompt;
+app.post("/api/chat-bot", upload.single("file"), async (req, res, next) => {
+  const prompt = req.body.content;
   const sessionId = req.body.sessionId || "user-1";
   const file = req.file;
-
-  console.log(file);
 
   if (!sessionId) {
     return res.status(400).send({ error: "Session ID is required" });
@@ -139,19 +75,25 @@ app.post("/api/chat-bot", upload.single("file"), async (req, res) => {
         top_p: 0.9,
       });
 
-      for await (const chunk of result.stream) {
-        const text = chunk.text();
+      for await (const chunk of result?.stream) {
+        const text = chunk?.text();
         conversationContexts[sessionId].push(`AI: ${text}`);
         res.write(`data: ${text}\n\n`);
       }
       res.write("event: end\n\n");
       res.end();
     } catch (error) {
+      console.log("new error------");
       throw new Error(error);
     }
   } else {
     conversationContexts[sessionId].push(`User: ${prompt}`);
-    await genTextStream(sessionId, prompt, res);
+    try {
+      await genTextStream(sessionId, prompt, res);
+    } catch (error) {
+      console.log("ERRRRRRRRRRRRRRRRRRRRRRR");
+      next(new Error(error));
+    }
   }
 });
 
@@ -192,6 +134,7 @@ async function genTextStream(chatId, prompt, res) {
       });
     } catch (error) {
       console.log(error);
+      throw new Error(error);
     }
 
     for await (const chunk of result.stream) {
@@ -207,6 +150,7 @@ async function genTextStream(chatId, prompt, res) {
   } catch (error) {
     res.write(`event: error\ndata: ${error.message}\n\n`);
     res.end();
+    throw new Error(error);
   }
 }
 
